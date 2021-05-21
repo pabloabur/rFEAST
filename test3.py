@@ -37,7 +37,7 @@ prev_world_t = 0
 feature_winner = {'w1': [], 'w2': []}
 
 # Run throught events
-for epoch in range(50000):
+for epoch in range(65000):
     t += 1
     random_walk += np.random.normal(0, .1)
     if random_walk > 1 or random_walk < 0:
@@ -62,6 +62,11 @@ for epoch in range(50000):
                 T[:, k+i] += 1
         if random.uniform(0, 1) > .5:
             T = T.T
+
+    if t>50000:
+        #TODO better make another loop with learning turned off
+        if np.random.rand() < .1:
+            T = np.random.randint(2, size=np.shape(T))
 
     # Join and normalize event contexts
     event_context = T.reshape(input_dim, 1)

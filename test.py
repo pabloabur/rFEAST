@@ -3,6 +3,8 @@ import matplotlib.pyplot as plt
 import random
 import math
 
+from utils import generate_observations, generate_events
+
 patterns = np.zeros((5, 3, 3))
 patterns[0, 1, :] = 1
 patterns[1, :, 1] = 1
@@ -19,15 +21,8 @@ states = 1
 observations = [[] for x in range(states)]
 num_patterns = 30
 
-# Creating observations from states
-for state in range(states):
-    for _ in range(num_patterns):
-        t += 1
-        pattern = random.choice(state_patterns[state])
-        for j in range(0, 3):
-            for k in range(0, 3):
-                if patterns[pattern, j, k] == 1:
-                    observations[state].append((j, k, t))
+obs = generate_observations(patterns, 30)
+ev = generate_events(obs)
 
 """ Creating feast """
 num_neurons = 4
@@ -47,26 +42,26 @@ T = np.zeros((3, 3))  # Time surface
 
 # Run throught events
 for epoch in range(50):
-    for index, sample in enumerate(observations):
+    #for index, sample in enumerate(ev):
         # In case we want to skip learning of a state
         #if index == 0:
         #    continue
-        for event in sample:
-            (x, y, ts) = event
-            T[x, y] = ts*10  # space events so that a single event is learned
-            event_context = np.exp((T-ts)/event_tau).reshape(9, 1)
-            event_context = event_context/np.linalg.norm(event_context)
-            print(event_context)
-            dist = np.dot(w, event_context)  # cos(theta) = A*B/||A||/||B||
-            print(dist)
-            dist[dist < thres] = 0
-            winner = np.argmax(dist)  # Looking for when theta=0 => cos(theta)=1
-            if dist[winner] == 0:  # When no one reaches threshold
-                thres = thres - thres_open
-            else:
-                w[winner, :] = (1-eta)*w[winner, :] + eta*event_context.T
-                w[winner, :] = w[winner, :]/np.linalg.norm(w[winner, :])
-                thres[winner] = thres[winner] + thres_close
+    for event in ev:
+        (x, y, ts) = event
+        T[x, y] = ts*10  # space events so that a single event is learned
+        event_context = np.exp((T-ts)/event_tau).reshape(9, 1)
+        event_context = event_context/np.linalg.norm(event_context)
+        print(event_context)
+        dist = np.dot(w, event_context)  # cos(theta) = A*B/||A||/||B||
+        print(dist)
+        dist[dist < thres] = 0
+        winner = np.argmax(dist)  # Looking for when theta=0 => cos(theta)=1
+        if dist[winner] == 0:  # When no one reaches threshold
+            thres = thres - thres_open
+        else:
+            w[winner, :] = (1-eta)*w[winner, :] + eta*event_context.T
+            w[winner, :] = w[winner, :]/np.linalg.norm(w[winner, :])
+            thres[winner] = thres[winner] + thres_close
 
 # Plots
 sq_n_neurons = math.ceil(math.sqrt(num_neurons))
