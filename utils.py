@@ -13,7 +13,7 @@ def generate_events(input_patterns):
     Returns
     -------
     events_array : list of tuple
-        Events with tuple (x, y, t) representing x-axis, y-axis, and time, respectivaly.
+        Events with tuple (x, y, t) representing x-axis, y-axis, and time, respectively.
         
     """
     events_array = []
@@ -23,6 +23,9 @@ def generate_events(input_patterns):
             events_array.append((x, y, sample))
 
     return events_array
+
+def simple_random_walk():
+    pass
 
 def generate_observations(observations, num_samples,
                           feature_transition='random'):
@@ -38,17 +41,22 @@ def generate_observations(observations, num_samples,
     Returns
     -------
     input_sequence : numpy.ndarray
+        Sequence of features generated.
+    class_sequence : list
+        Sequence of the classes generated according to input_sequence.
     """
+    num_features = np.shape(observations)[0]
     x_dim, y_dim = np.shape(observations)[1], np.shape(observations)[2]
     input_sequence = np.zeros((num_samples, x_dim, y_dim))
+    class_sequence = [np.nan for _ in range(num_samples)]
 
     if feature_transition == 'random':
         feature_transition = np.random.choice
     elif feature_transition == 'random_walk':
-        pass
-    num_features = np.shape(observations)[0]
+        feature_transition = simple_random_walk
     for sample in range(num_samples):
         feature = feature_transition(range(num_features))
         input_sequence[sample, :, :] = observations[feature, :, :]
+        class_sequence[sample] = feature
 
-    return input_sequence
+    return input_sequence, class_sequence
