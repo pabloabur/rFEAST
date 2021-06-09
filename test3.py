@@ -43,6 +43,17 @@ duration = []
 prev_world_t = 0
 feature_winner = {'w1': [], 'w2': []}
 feature_class = np.nan
+feature_mappings = {0: 'vertical', 1: 'horizontal',
+                    2: 'desc_diagonal', 3: 'asc_diagonal',
+                    4: 'noise'}
+features = {0: 0, 1: 0, 2: 0, 3: 0}
+class_winners = {0: [0 for _ in range(num_neurons)],
+                 1: [0 for _ in range(num_neurons)],
+                 2: [0 for _ in range(num_neurons)],
+                 3: [0 for _ in range(num_neurons)],
+                 4: [0 for _ in range(num_neurons)]}
+feature_t = []
+winners_t = []
 noise_flag = False
 false_positives = []
 unmatched_noise = 0
@@ -68,10 +79,10 @@ for epoch in range(65000):
         for i in range(-thickness, thickness+1):
             if k+i < input_channels:
                 T += np.eye(input_channels, k=k+i)
-        feature_class = world
+        feature_class = 2
         if random.uniform(0, 1) > .5:
             T = np.flip(T, axis=1)
-            feature_class += 1
+            feature_class = 3
     else:
         T = np.zeros((input_channels, input_channels))  # Time surface
         k=np.random.randint(2, input_channels-2)
@@ -79,10 +90,10 @@ for epoch in range(65000):
         for i in range(-thickness, thickness+1):
             if k+i >= 0 and k+i < input_channels:
                 T[:, k+i] += 1
-        feature_class = world
+        feature_class = 0
         if random.uniform(0, 1) > .5:
             T = T.T
-            feature_class += 1
+            feature_class = 1
 
     if t>50000:
         #TODO better make another loop with learning turned off
@@ -92,6 +103,7 @@ for epoch in range(65000):
             T = np.random.rand(*np.shape(T))
             noise_flag ^= True
             noise_count += 1
+            feature_class = 4
 
     # Join and normalize event contexts
     event_context = T.reshape(input_dim, 1)
@@ -109,6 +121,7 @@ for epoch in range(65000):
     winner = np.argmax(dist)  # Looking for when theta=0 => cos(theta)=1
     if dist[winner] == 0:  # When no one reaches threshold
         thres = thres - thres_open
+        winners_t.append(-1)
         if noise_flag:
             unmatched_noise += 1
             noise_flag ^= True
@@ -119,7 +132,10 @@ for epoch in range(65000):
         if mode == 'rec':
             rec_T[winner] = t
 
-        # Keep track of winners
+        # Keep track of winners and states
+        winners_t.append(winner)
+        feature_t.append(feature_class)
+        class_winners[feature_class][winner] += 1
         if world == 1:
             feature_winner['w1'].append(winner)
         else:
@@ -157,6 +173,27 @@ plt.figure()
 _=plt.hist(false_positives)
 plt.xlabel('Neuron index')
 plt.ylabel('Number of false positives')
+
+plt.figure()
+bar_width = 0.2
+plt.bar(np.arange(num_neurons) - 0.4, class_winners[0], bar_width, label=feature_mappings[0])
+plt.bar(np.arange(num_neurons) - 0.2, class_winners[1], bar_width, label=feature_mappings[1])
+plt.bar(np.arange(num_neurons), class_winners[2], bar_width, label=feature_mappings[2])
+plt.bar(np.arange(num_neurons) + 0.2, class_winners[3], bar_width, label=feature_mappings[3])
+plt.bar(np.arange(num_neurons) + 0.4, class_winners[4], bar_width, label=feature_mappings[4])
+plt.xlabel('Neuron index')
+plt.ylabel('Number of wins')
+plt.legend()
+
+plt.figure()
+ax=plt.subplot(211)
+plt.plot(feature_t)
+plt.xlabel('Time (samples)')
+plt.ylabel('Class number')
+plt.subplot(212, sharex=ax)
+plt.plot(winners_t, '.')
+plt.xlabel('Time (samples)')
+plt.ylabel('Winner neuron index')
 
 print(f'noise occurences: {noise_count}')
 print(f'Number of false positives: {len(false_positives)}')
