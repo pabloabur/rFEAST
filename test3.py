@@ -38,15 +38,20 @@ T = np.zeros((input_channels, input_channels))
 if mode == 'rec':
     rec_T = np.zeros((num_neurons, 1))
 
+# Defines importance of feedforward (alpha) versus recurrent (beta) weights
+alpha = 1.01
+beta = .99
+
 # Variables used to evaluate world transitions
 duration = []
 prev_world_t = 0
-feature_winner = {'w1': [], 'w2': []}
 feature_class = np.nan
 feature_mappings = {0: 'vertical', 1: 'horizontal',
                     2: 'desc_diagonal', 3: 'asc_diagonal',
                     4: 'noise'}
-features = {0: 0, 1: 0, 2: 0, 3: 0}
+color_mappings = {0: 'blue', 1: 'orange',
+                    2: 'green', 3: 'red',
+                    4: 'purple'}
 class_winners = {0: [0 for _ in range(num_neurons)],
                  1: [0 for _ in range(num_neurons)],
                  2: [0 for _ in range(num_neurons)],
@@ -104,6 +109,20 @@ for epoch in range(65000):
             noise_flag ^= True
             noise_count += 1
             feature_class = 4
+        #if t==50001:
+        #    sq_n_neurons = math.ceil(math.sqrt(num_neurons))
+        #    fig, axs = plt.subplots(sq_n_neurons, sq_n_neurons)
+        #    plt.title('feedforward')
+        #    for i in range(num_neurons):
+        #        axs.flat[i].imshow(np.reshape(w[i, :input_dim], (input_channels, input_channels)))
+        #        axs.flat[i].set_title(f'neu{i}, thr:{thres[i]}')
+        #    if mode == 'rec':
+        #        fig, axs = plt.subplots(sq_n_neurons, sq_n_neurons)
+        #        plt.title('recurrent')
+        #        for i in range(num_neurons):
+        #            axs.flat[i].imshow(np.reshape(w[i, input_dim:], (np.sqrt(num_neurons).astype(int), np.sqrt(num_neurons).astype(int))))
+        #            axs.flat[i].set_title(f'neu{i}, thr:{thres[i]}')
+        #    plt.show()
 
     # Join and normalize event contexts
     event_context = T.reshape(input_dim, 1)
@@ -116,12 +135,20 @@ for epoch in range(65000):
     total_event_context = total_event_context/np.linalg.norm(total_event_context)
 
     # Defines winner
+    if mode == 'rec':
+        w = np.concatenate(
+            (alpha*w[:, :input_dim], beta*w[:, input_dim:]),
+            axis=1)
     dist = np.dot(w, total_event_context)  # cos(theta) = A*B/||A||/||B||
     dist[dist < thres] = 0
     winner = np.argmax(dist)  # Looking for when theta=0 => cos(theta)=1
     if dist[winner] == 0:  # When no one reaches threshold
         thres = thres - thres_open
+
+        # Keep track of winners and states
         winners_t.append(-1)
+        feature_t.append(feature_class)
+
         if noise_flag:
             unmatched_noise += 1
             noise_flag ^= True
@@ -136,10 +163,6 @@ for epoch in range(65000):
         winners_t.append(winner)
         feature_t.append(feature_class)
         class_winners[feature_class][winner] += 1
-        if world == 1:
-            feature_winner['w1'].append(winner)
-        else:
-            feature_winner['w2'].append(winner)
 
         if noise_flag:
             false_positives.append(winner)
@@ -164,23 +187,18 @@ if mode == 'rec':
         axs.flat[i].set_title(f'neu{i}, thr:{thres[i]}')
 
 plt.figure()
-_=plt.hist(feature_winner['w1'], bins=num_neurons, range=(0, num_neurons-1), color='k', histtype='step')
-_=plt.hist(feature_winner['w2'], bins=num_neurons, range=(0, num_neurons-1), color='r', histtype='step')
-plt.xlabel('Neuron index')
-plt.ylabel('Wins')
-
-plt.figure()
 _=plt.hist(false_positives)
 plt.xlabel('Neuron index')
 plt.ylabel('Number of false positives')
 
 plt.figure()
-bar_width = 0.2
-plt.bar(np.arange(num_neurons) - 0.4, class_winners[0], bar_width, label=feature_mappings[0])
-plt.bar(np.arange(num_neurons) - 0.2, class_winners[1], bar_width, label=feature_mappings[1])
-plt.bar(np.arange(num_neurons), class_winners[2], bar_width, label=feature_mappings[2])
-plt.bar(np.arange(num_neurons) + 0.2, class_winners[3], bar_width, label=feature_mappings[3])
-plt.bar(np.arange(num_neurons) + 0.4, class_winners[4], bar_width, label=feature_mappings[4])
+bar_width = 0.1
+bar_offset = -0.2
+for event_class, val in feature_mappings.items():
+    plt.bar(np.arange(num_neurons) + bar_offset, class_winners[event_class],
+            bar_width, label=feature_mappings[event_class],
+            color=color_mappings[event_class])
+    bar_offset += bar_width
 plt.xlabel('Neuron index')
 plt.ylabel('Number of wins')
 plt.legend()
@@ -189,11 +207,14 @@ plt.figure()
 ax=plt.subplot(211)
 plt.plot(feature_t)
 plt.xlabel('Time (samples)')
-plt.ylabel('Class number')
+plt.ylabel('Input class')
+plt.yticks(np.arange(5), list(feature_mappings.values()), rotation=45)
 plt.subplot(212, sharex=ax)
 plt.plot(winners_t, '.')
 plt.xlabel('Time (samples)')
 plt.ylabel('Winner neuron index')
+plt.hlines(0, 0, len(winners_t), linestyles='dashed', label='no winners')
+plt.legend()
 
 print(f'noise occurences: {noise_count}')
 print(f'Number of false positives: {len(false_positives)}')
