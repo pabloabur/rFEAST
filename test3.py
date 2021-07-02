@@ -39,8 +39,8 @@ if mode == 'rec':
     rec_T = np.zeros((num_neurons, 1))
 
 # Defines importance of feedforward (alpha) versus recurrent (beta) weights
-alpha = 1.01
-beta = .99
+alpha = 1.0
+beta = 1.0
 
 # Variables used to evaluate world transitions
 duration = []
@@ -60,7 +60,7 @@ class_winners = {0: [0 for _ in range(num_neurons)],
 feature_t = []
 winners_t = []
 noise_flag = False
-false_positives = []
+noise_responses = []
 unmatched_noise = 0
 classified_noise = []
 noise_count = 0
@@ -165,7 +165,7 @@ for epoch in range(65000):
         class_winners[feature_class][winner] += 1
 
         if noise_flag:
-            false_positives.append(winner)
+            noise_responses.append(winner)
             classified_noise.append(T)
             noise_flag ^= True
 
@@ -187,9 +187,9 @@ if mode == 'rec':
         axs.flat[i].set_title(f'neu{i}, thr:{thres[i]}')
 
 plt.figure()
-_=plt.hist(false_positives)
+_=plt.hist(noise_responses)
 plt.xlabel('Neuron index')
-plt.ylabel('Number of false positives')
+plt.ylabel('# wins when noise was presented')
 
 plt.figure()
 bar_width = 0.1
@@ -217,7 +217,7 @@ plt.hlines(0, 0, len(winners_t), linestyles='dashed', label='no winners')
 plt.legend()
 
 print(f'noise occurences: {noise_count}')
-print(f'Number of false positives: {len(false_positives)}')
+print(f'Number of responses to noise: {len(noise_responses)}')
 print(f'Number times no neurons responded to noise: {unmatched_noise}')
 
 #plt.figure()
