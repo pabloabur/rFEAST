@@ -54,14 +54,14 @@ world = 1
 # Initialization
 thickness = 1
 # Matrix containing both feedforward and recurrent weights
-w = np.random.rand(num_neurons, input_dim + num_neurons)
 thres = np.zeros((num_neurons, 1))
-thres_open = .01
-thres_close = .001
-w_norm = np.linalg.norm(w, axis=1)
-w_norm = w_norm[:, np.newaxis]  # Increase dimension for division
-w = w/w_norm
-eta = .01
+thres_open = .001
+thres_close = .0005
+w = np.random.rand(num_neurons, input_dim + num_neurons)
+w_ff = w[:, :input_dim] / np.linalg.norm(w[:, :input_dim], axis=1, keepdims=True)
+w_rec = w[:, input_dim:]/ np.linalg.norm(w[:, input_dim:], axis=1, keepdims=True)
+eta_ff = .01
+eta_rec = .005
 recurrent_tau = 50
 
 # Time surfaces
@@ -69,7 +69,7 @@ T = np.zeros((input_channels, input_channels))
 rec_T = np.zeros((num_neurons, 1))
 
 # Defines importance of feedforward (alpha) versus recurrent (beta) weights
-alpha = 1.
+alpha = 0.65
 beta = 1.0 - alpha
 
 # Variables used to evaluate world transitions
@@ -167,28 +167,9 @@ for epoch in epochs:
         feedforward_event_context /= np.linalg.norm(feedforward_event_context)
         recurrent_event_context = np.exp(rec_T-t) / recurrent_tau
         recurrent_event_context /= np.linalg.norm(recurrent_event_context)
-        total_event_context = np.concatenate(
-            (feedforward_event_context, recurrent_event_context), axis=0)
 
-        # Defines winner
-        # TODO normalize separately? If I do, no feature representation
-        #if np.any(w[:, :input_dim]):
-        #    w_ff = w[:, :input_dim] / np.linalg.norm(w[:, :input_dim])
-        #else:
-        #    w_ff = w[:, :input_dim]
-        #if np.any(w[:, input_dim:]):
-        #    w_rec = w[:, input_dim:] / np.linalg.norm(w[:, input_dim:])
-        #else:
-        #    w_rec = w[:, input_dim:]
-        w_ff = w[:, :input_dim]
-        w_rec = w[:, input_dim:]
-
-        # TODO do I need weights here? Does not seem to make a diference
-        #w = np.concatenate((alpha*w_ff, beta*w_rec), axis=1)
-        w = np.concatenate((w_ff, w_rec), axis=1)
-        # TODO do I need weights here?
-        dist = (alpha * np.dot(w_ff, feedforward_event_context) # cos(theta) = A*B/||A||/||B||
-              + beta * np.dot(w_rec, recurrent_event_context))
+        dist = (alpha*np.dot(w_ff, feedforward_event_context) # cos(theta) = A*B/||A||/||B||
+            + beta*np.dot(w_rec, recurrent_event_context))
         dist[dist < thres] = 0
         winner = np.argmax(dist)  # Looking for when theta=0 => cos(theta)=1
         if dist[winner] == 0:  # When no one reaches threshold
@@ -202,11 +183,12 @@ for epoch in epochs:
                 unmatched_noise += 1
                 noise_flag ^= True
         else:
-            w[winner, :input_dim] = alpha * ((1-eta)*w[winner, :input_dim] + eta*feedforward_event_context.T)
-            w[winner, input_dim:] = beta * ((1-eta)*w[winner, input_dim:] + eta*recurrent_event_context.T)
-            # TODO Or all at once?
-            #w[winner, :] = (1-eta)*w[winner, :] + eta*total_event_context.T
-            w[winner, :] = w[winner, :]/np.linalg.norm(w[winner, :])
+            w_ff[winner, :] = (1-eta_ff)*w_ff[winner, :] + eta_ff*feedforward_event_context.T
+            w_ff[winner, :] = w_ff[winner, :]/np.linalg.norm(w_ff[winner, :])
+
+            w_rec[winner, :] = (1-eta_rec)*w_rec[winner, :] + eta_rec*recurrent_event_context.T
+            w_rec[winner, :] = w_rec[winner, :]/np.linalg.norm(w_rec[winner, :])
+
             thres[winner] = thres[winner] + thres_close
             rec_T[winner] = t
 
@@ -236,13 +218,13 @@ sq_n_neurons = math.ceil(math.sqrt(num_neurons))
 fig, axs = plt.subplots(sq_n_neurons, sq_n_neurons)
 plt.title('feedforward')
 for i in range(num_neurons):
-    axs.flat[i].imshow(np.reshape(w[i, :input_dim], (input_channels, input_channels)))
+    axs.flat[i].imshow(np.reshape(w_ff[i, :], (input_channels, input_channels)))
     axs.flat[i].set_title(f'neu{i}, thr:{thres[i]}')
 
 fig, axs = plt.subplots(sq_n_neurons, sq_n_neurons)
 plt.title('recurrent')
 for i in range(num_neurons):
-    axs.flat[i].imshow(np.reshape(w[i, input_dim:], (np.sqrt(num_neurons).astype(int), np.sqrt(num_neurons).astype(int))))
+    axs.flat[i].imshow(np.reshape(w_rec[i, :], (np.sqrt(num_neurons).astype(int), np.sqrt(num_neurons).astype(int))))
     axs.flat[i].set_title(f'neu{i}, thr:{thres[i]}')
 
 plt.figure()
@@ -251,7 +233,8 @@ plt.xlabel('Neuron index')
 plt.ylabel('# wins when noise was presented')
 
 avg_hist = average_histograms(monitor_class_winners, num_neurons)
-plot_classifications(num_neurons, avg_hist, feature_mappings, color_mappings)
+#plot_classifications(num_neurons, avg_hist, feature_mappings, color_mappings)
+plot_classifications(num_neurons, monitor_class_winners[-1], feature_mappings, color_mappings)
 
 plt.figure()
 ax=plt.subplot(211)
