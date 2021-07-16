@@ -6,9 +6,56 @@ import matplotlib.pyplot as plt
 import random
 
 import math
-import sys
 import warnings
 warnings.filterwarnings('error')
+
+plt.ion()
+
+
+class weights_monitor:
+    def __init__(self, num_neurons, input_channels):
+        self.num_neurons = num_neurons
+        self.input_channels = input_channels
+        self.sq_n_neurons = math.ceil(math.sqrt(self.num_neurons))
+
+        self.fig_ff, self.axs_ff = plt.subplots(self.sq_n_neurons, self.sq_n_neurons)
+        self.fig_ff.tight_layout(h_pad=0.2)
+        self.im_ff = np.zeros_like(self.axs_ff)
+        for i in range(self.num_neurons):
+            self.im_ff.flat[i] = self.axs_ff.flat[i].imshow(
+                np.random.rand(self.input_channels, self.input_channels),
+                vmin=0, vmax=1)
+            self.axs_ff.flat[i].set_title(f'neu{i}, thr:0.00', fontsize=10)
+
+        self.fig_rec, self.axs_rec = plt.subplots(self.sq_n_neurons, self.sq_n_neurons)
+        self.fig_rec.tight_layout(h_pad=0.2)
+        self.im_rec = np.zeros_like(self.axs_rec)
+        for i in range(self.num_neurons):
+            self.im_rec.flat[i] = self.axs_rec.flat[i].imshow(
+                np.random.rand(np.sqrt(self.num_neurons).astype(int),
+                np.sqrt(self.num_neurons).astype(int)),
+                vmin=0, vmax=1)
+            self.axs_rec.flat[i].set_title(f'neu{i}, thr:0.00', fontsize=10)
+        plt.pause(0.05)
+
+    def update_plots(self, feedforward_w, recurrent_w, thres, autoscale=False):
+        for i in range(self.num_neurons):
+            weights = np.reshape(feedforward_w[i, :], (self.input_channels, self.input_channels))
+            self.im_ff.flat[i].set_data(weights)
+            self.axs_ff.flat[i].set_title(f'neu:{i}, thr:{thres[i]:.2f}', fontsize=10)
+            if autoscale:
+                self.im_ff.flat[i].autoscale()
+        self.fig_ff.canvas.flush_events()
+
+        for i in range(self.num_neurons):
+            weights = np.reshape(recurrent_w[i, :], (np.sqrt(self.num_neurons).astype(int),
+                                               np.sqrt(self.num_neurons).astype(int)))
+            self.im_rec.flat[i].set_data(weights)
+            self.axs_rec.flat[i].set_title(f'neu:{i}, thr:{thres[i]:.2f}', fontsize=10)
+            if autoscale:
+                self.im_rec.flat[i].autoscale()
+        self.fig_rec.canvas.flush_events()
+
 
 def plot_classifications(num_neurons, class_winners, feature_mappings, color_mappings):
     plt.figure()
@@ -23,6 +70,7 @@ def plot_classifications(num_neurons, class_winners, feature_mappings, color_map
     plt.ylabel('Number of wins')
     plt.legend()
     plt.pause(0.1)
+
 
 def average_histograms(histogram_samples, num_neurons):
     avg_hist = {0: np.array([0 for _ in range(num_neurons)], dtype=float),
@@ -41,8 +89,9 @@ def average_histograms(histogram_samples, num_neurons):
 
     return avg_hist
 
+
 """ Creating feast """
-num_neurons = 36
+num_neurons = 25
 input_channels = 11
 input_dim = input_channels * input_channels
 
@@ -56,10 +105,10 @@ thickness = 1
 # Matrix containing both feedforward and recurrent weights
 thres = np.zeros((num_neurons, 1))
 thres_open = .001
-thres_close = .0005
+thres_close = .001
 w = np.random.rand(num_neurons, input_dim + num_neurons)
 w_ff = w[:, :input_dim] / np.linalg.norm(w[:, :input_dim], axis=1, keepdims=True)
-w_rec = w[:, input_dim:]/ np.linalg.norm(w[:, input_dim:], axis=1, keepdims=True)
+w_rec = w[:, input_dim:] / np.linalg.norm(w[:, input_dim:], axis=1, keepdims=True)
 eta_ff = .01
 eta_rec = .005
 recurrent_tau = 50
@@ -73,15 +122,13 @@ alpha = 0.65
 beta = 1.0 - alpha
 
 # Variables used to evaluate world transitions
-duration = []
-prev_world_t = 0
 feature_class = np.nan
 feature_mappings = {0: 'vertical', 1: 'horizontal',
                     2: 'desc_diagonal', 3: 'asc_diagonal',
                     4: 'noise_axis', 5: 'noise_diag'}
 color_mappings = {0: 'blue', 1: 'orange',
-                    2: 'green', 3: 'red',
-                    4: 'purple', 5: 'yellow'}
+                  2: 'green', 3: 'red',
+                  4: 'purple', 5: 'yellow'}
 class_winners = {0: [0 for _ in range(num_neurons)],
                  1: [0 for _ in range(num_neurons)],
                  2: [0 for _ in range(num_neurons)],
@@ -92,13 +139,14 @@ feature_t = []
 winners_t = []
 noise_flag = False
 noise_responses = []
-unmatched_noise = 0
 classified_noise = []
-noise_count = 0
+
+# Prepare plots
+w_mon = weights_monitor(num_neurons, input_channels)
 
 # Run throught events
 epochs = range(10)
-iterations = 6500
+iterations = 8000
 monitor_class_winners = []
 monitor_thres = np.zeros((num_neurons, len(epochs)*iterations+1))
 for epoch in epochs:
@@ -110,12 +158,10 @@ for epoch in epochs:
         if random_walk > 1 or random_walk < 0:
             world *= (-1)
             random_walk = .5
-            duration.append(t - prev_world_t)
-            prev_world_t = t
 
         # Generate samples on the fly
         if world == 1:
-            k=np.random.randint(-input_channels+2, input_channels-2)
+            k = np.random.randint(-input_channels+2, input_channels-2)
             T = np.eye(input_channels, k=k)
             for i in range(-thickness, thickness+1):
                 if k+i < input_channels:
@@ -126,7 +172,7 @@ for epoch in epochs:
                 feature_class = 3
         else:
             T = np.zeros((input_channels, input_channels))  # Time surface
-            k=np.random.randint(2, input_channels-2)
+            k = np.random.randint(2, input_channels-2)
             T[:, k] = 1
             for i in range(-thickness, thickness+1):
                 if k+i >= 0 and k+i < input_channels:
@@ -136,31 +182,13 @@ for epoch in epochs:
                 T = T.T
                 feature_class = 1
 
-        #TODO better make another loop with learning turned off
         if np.random.rand() < .1:
-            #T = np.random.randint(2, size=np.shape(T))
-            #T = np.zeros(np.shape(T))
             T = np.random.rand(*np.shape(T))
             noise_flag ^= True
-            noise_count += 1
             if feature_class == 0 or feature_class == 1:
                 feature_class = 4
             else:
                 feature_class = 5
-        #if t==50001:
-        #    sq_n_neurons = math.ceil(math.sqrt(num_neurons))
-        #    fig, axs = plt.subplots(sq_n_neurons, sq_n_neurons)
-        #    plt.title('feedforward')
-        #    for i in range(num_neurons):
-        #        axs.flat[i].imshow(np.reshape(w[i, :input_dim], (input_channels, input_channels)))
-        #        axs.flat[i].set_title(f'neu{i}, thr:{thres[i]}')
-        #    if mode == 'rec':
-        #        fig, axs = plt.subplots(sq_n_neurons, sq_n_neurons)
-        #        plt.title('recurrent')
-        #        for i in range(num_neurons):
-        #            axs.flat[i].imshow(np.reshape(w[i, input_dim:], (np.sqrt(num_neurons).astype(int), np.sqrt(num_neurons).astype(int))))
-        #            axs.flat[i].set_title(f'neu{i}, thr:{thres[i]}')
-        #    plt.show()
 
         # Join and normalize event contexts
         feedforward_event_context = T.reshape(input_dim, 1)
@@ -168,8 +196,8 @@ for epoch in epochs:
         recurrent_event_context = np.exp(rec_T-t) / recurrent_tau
         recurrent_event_context /= np.linalg.norm(recurrent_event_context)
 
-        dist = (alpha*np.dot(w_ff, feedforward_event_context) # cos(theta) = A*B/||A||/||B||
-            + beta*np.dot(w_rec, recurrent_event_context))
+        dist = (alpha*np.dot(w_ff, feedforward_event_context)  # cos(theta) = A*B/||A||/||B||
+                + beta*np.dot(w_rec, recurrent_event_context))
         dist[dist < thres] = 0
         winner = np.argmax(dist)  # Looking for when theta=0 => cos(theta)=1
         if dist[winner] == 0:  # When no one reaches threshold
@@ -180,7 +208,6 @@ for epoch in epochs:
             feature_t.append(feature_class)
 
             if noise_flag:
-                unmatched_noise += 1
                 noise_flag ^= True
         else:
             w_ff[winner, :] = (1-eta_ff)*w_ff[winner, :] + eta_ff*feedforward_event_context.T
@@ -203,9 +230,10 @@ for epoch in epochs:
                 noise_flag ^= True
 
         monitor_thres[:, t] = thres.flatten()
+        if iteration % 500 == 0:
+            w_mon.update_plots(w_ff, w_rec, thres.flatten(), True)
 
     monitor_class_winners.append(class_winners)
-    #plot_classifications(num_neurons, class_winners, feature_mappings, color_mappings)
     class_winners = {0: [0 for _ in range(num_neurons)],
                      1: [0 for _ in range(num_neurons)],
                      2: [0 for _ in range(num_neurons)],
@@ -213,22 +241,10 @@ for epoch in epochs:
                      4: [0 for _ in range(num_neurons)],
                      5: [0 for _ in range(num_neurons)]}
 
-# Plots
-sq_n_neurons = math.ceil(math.sqrt(num_neurons))
-fig, axs = plt.subplots(sq_n_neurons, sq_n_neurons)
-plt.title('feedforward')
-for i in range(num_neurons):
-    axs.flat[i].imshow(np.reshape(w_ff[i, :], (input_channels, input_channels)))
-    axs.flat[i].set_title(f'neu{i}, thr:{thres[i]}')
-
-fig, axs = plt.subplots(sq_n_neurons, sq_n_neurons)
-plt.title('recurrent')
-for i in range(num_neurons):
-    axs.flat[i].imshow(np.reshape(w_rec[i, :], (np.sqrt(num_neurons).astype(int), np.sqrt(num_neurons).astype(int))))
-    axs.flat[i].set_title(f'neu{i}, thr:{thres[i]}')
+w_mon.update_plots(w_ff, w_rec, thres.flatten(), True)
 
 plt.figure()
-_=plt.hist(noise_responses)
+_ = plt.hist(noise_responses)
 plt.xlabel('Neuron index')
 plt.ylabel('# wins when noise was presented')
 
@@ -237,7 +253,7 @@ avg_hist = average_histograms(monitor_class_winners, num_neurons)
 plot_classifications(num_neurons, monitor_class_winners[-1], feature_mappings, color_mappings)
 
 plt.figure()
-ax=plt.subplot(211)
+ax = plt.subplot(211)
 plt.plot(feature_t)
 plt.xlabel('Time (samples)')
 plt.ylabel('Input class')
@@ -250,22 +266,9 @@ plt.hlines(0, 0, len(winners_t), linestyles='dashed', label='no winners')
 plt.legend()
 
 plt.figure()
-for i in range(36):
+for i in range(num_neurons):
     plt.plot(monitor_thres[i])
 plt.xlabel('Time (samples)')
 plt.ylabel('Thresholds')
-
-print(f'noise occurences: {noise_count}')
-print(f'Number of responses to noise: {len(noise_responses)}')
-print(f'Number times no neurons responded to noise: {unmatched_noise}')
-
-#plt.figure()
-#plt.imshow(classified_noise[0])
-#plt.figure()
-#plt.imshow(classified_noise[10])
-#plt.figure()
-#plt.imshow(classified_noise[20])
-#plt.figure()
-#plt.imshow(classified_noise[30])
 
 plt.pause(0.1)
