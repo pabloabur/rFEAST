@@ -3,6 +3,7 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.ticker import MaxNLocator
 import random
 
 import math
@@ -58,7 +59,7 @@ class weights_monitor:
 
 
 def plot_classifications(num_neurons, class_winners, feature_mappings, color_mappings):
-    plt.figure()
+    ax = plt.figure().gca()
     bar_width = 0.1
     bar_offset = -0.2
     for event_class, val in feature_mappings.items():
@@ -66,9 +67,12 @@ def plot_classifications(num_neurons, class_winners, feature_mappings, color_map
                 bar_width, label=feature_mappings[event_class],
                 color=color_mappings[event_class])
         bar_offset += bar_width
-    plt.xlabel('Neuron index')
-    plt.ylabel('Number of wins')
+    plt.xlabel('Neuron index', fontsize=24)
+    plt.ylabel('Number of wins', fontsize=24)
+    plt.yticks(fontsize=24)
+    plt.xticks(fontsize=24)
     plt.legend()
+    ax.xaxis.set_major_locator(MaxNLocator(integer=True))
     plt.pause(0.1)
 
 
@@ -125,7 +129,7 @@ beta = 1.0 - alpha
 feature_class = np.nan
 feature_mappings = {0: 'vertical', 1: 'horizontal',
                     2: 'desc_diagonal', 3: 'asc_diagonal',
-                    4: 'noise_axis', 5: 'noise_diag'}
+                    4: 'noise_2', 5: 'noise_1'}
 color_mappings = {0: 'blue', 1: 'orange',
                   2: 'green', 3: 'red',
                   4: 'purple', 5: 'yellow'}
